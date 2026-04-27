@@ -1,0 +1,208 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>[n]phenacene drawer</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    input, button { font-size: 1rem; }
+    input { width: 5rem; }
+    svg { border: 1px solid #ddd; margin-top: 0.5rem; display: block; }
+    line { stroke: #333; stroke-width: 1.5; }
+    .carbon { fill: #ffc857; stroke: #333; stroke-width: 0.5; }
+    .hydrogen { fill: #000; }
+    .row { margin-top: 1.5rem; }
+    #formula { margin-top: 0.5rem; font-size: 1.3rem; }
+  </style>
+</head>
+<body>
+
+<p>
+  Draw [n]phenacene:
+  <input id="n" type="number" min="1" value="4">
+</p>
+
+<div class="row">
+  <p>Carbon skeleton only</p>
+  <svg id="molCarbon" width="900" height="220"></svg>
+</div>
+
+<div class="row">
+  <p>
+    With hydrogen atoms
+    <button id="formulaButton">Show formula</button>
+  </p>
+  <svg id="molHydrogen" width="900" height="260"></svg>
+  <div id="formula"></div>
+</div>
+
+<script>
+const input = document.getElementById("n");
+const svgCarbon = document.getElementById("molCarbon");
+const svgHydrogen = document.getElementById("molHydrogen");
+const formulaDiv = document.getElementById("formula");
+const formulaButton = document.getElementById("formulaButton");
+
+const R = 35;
+const C_RADIUS = 4;
+const H_RADIUS = 3;
+const H_BOND = 22;
+
+const dx = 1.5 * R;
+const dy = Math.sqrt(3) / 2 * R;
+
+function hexagon(cx, cy) {
+  const pts = [];
+
+  for (let k = 0; k < 6; k++) {
+    const angle = Math.PI / 3 * k;
+    pts.push([
+      cx + R * Math.cos(angle),
+      cy + R * Math.sin(angle)
+    ]);
+  }
+
+  return pts;
+}
+
+function key(p) {
+  return p.map(x => Math.round(x * 1000) / 1000).join(",");
+}
+
+function addLine(svg, a, b) {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", a[0]);
+  line.setAttribute("y1", a[1]);
+  line.setAttribute("x2", b[0]);
+  line.setAttribute("y2", b[1]);
+  svg.appendChild(line);
+}
+
+function addCircle(svg, p, r, className) {
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  c.setAttribute("cx", p[0]);
+  c.setAttribute("cy", p[1]);
+  c.setAttribute("r", r);
+  c.setAttribute("class", className);
+  svg.appendChild(c);
+}
+
+function moleculeData(n) {
+  const vertices = new Map();
+  const edges = new Map();
+  const neighbours = new Map();
+
+  for (let i = 0; i < n; i++) {
+    const cx = 70 + i * dx;
+    const cy = 130 + (i % 2 === 0 ? dy / 2 : -dy / 2);
+
+    const pts = hexagon(cx, cy);
+
+    for (const p of pts) {
+      vertices.set(key(p), p);
+    }
+
+    for (let k = 0; k < 6; k++) {
+      const a = pts[k];
+      const b = pts[(k + 1) % 6];
+
+      const ka = key(a);
+      const kb = key(b);
+      const edgeKey = [ka, kb].sort().join("|");
+
+      edges.set(edgeKey, [a, b]);
+    }
+  }
+
+  for (const [a, b] of edges.values()) {
+    const ka = key(a);
+    const kb = key(b);
+
+    if (!neighbours.has(ka)) neighbours.set(ka, []);
+    if (!neighbours.has(kb)) neighbours.set(kb, []);
+
+    neighbours.get(ka).push(b);
+    neighbours.get(kb).push(a);
+  }
+
+  return { vertices, edges, neighbours };
+}
+
+function drawCarbonOnly(n) {
+  svgCarbon.innerHTML = "";
+
+  const { vertices, edges } = moleculeData(n);
+
+  for (const [a, b] of edges.values()) {
+    addLine(svgCarbon, a, b);
+  }
+
+  for (const p of vertices.values()) {
+    addCircle(svgCarbon, p, C_RADIUS, "carbon");
+  }
+
+  const width = 140 + (n - 1) * dx + 2 * R;
+  svgCarbon.setAttribute("viewBox", `0 0 ${width} 220`);
+}
+
+function drawWithHydrogen(n) {
+  svgHydrogen.innerHTML = "";
+
+  const { vertices, edges, neighbours } = moleculeData(n);
+
+  for (const [a, b] of edges.values()) {
+    addLine(svgHydrogen, a, b);
+  }
+
+  for (const [k, p] of vertices.entries()) {
+    const ns = neighbours.get(k);
+
+    if (ns.length === 2) {
+      const v1 = [p[0] - ns[0][0], p[1] - ns[0][1]];
+      const v2 = [p[0] - ns[1][0], p[1] - ns[1][1]];
+
+      let out = [v1[0] + v2[0], v1[1] + v2[1]];
+      const len = Math.hypot(out[0], out[1]);
+
+      out = [out[0] / len, out[1] / len];
+
+      const h = [
+        p[0] + out[0] * H_BOND,
+        p[1] + out[1] * H_BOND
+      ];
+
+      addLine(svgHydrogen, p, h);
+      addCircle(svgHydrogen, h, H_RADIUS, "hydrogen");
+    }
+  }
+
+  for (const p of vertices.values()) {
+    addCircle(svgHydrogen, p, C_RADIUS, "carbon");
+  }
+
+  const width = 140 + (n - 1) * dx + 2 * R;
+  svgHydrogen.setAttribute("viewBox", `0 0 ${width} 260`);
+}
+
+function drawBoth() {
+  const n = Math.max(1, Number(input.value));
+  formulaDiv.innerHTML = "";
+
+  drawCarbonOnly(n);
+  drawWithHydrogen(n);
+}
+
+function showFormula() {
+  const n = Math.max(1, Number(input.value));
+  formulaDiv.innerHTML =
+    `[${n}]phenacene: C<sub>${4 * n + 2}</sub>H<sub>${2 * n + 4}</sub>`;
+}
+
+input.addEventListener("input", drawBoth);
+formulaButton.addEventListener("click", showFormula);
+
+drawBoth();
+</script>
+
+</body>
+</html>
