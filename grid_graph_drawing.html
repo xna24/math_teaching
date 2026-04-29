@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Graph Drawing Tool</title>
+
+<style>
+body {
+    background-color: #DDDDDD;
+    user-select: none;
+}
+
+#canvasholder {
+    position: relative;
+    display: inline-block;
+    border: 2px solid black;
+}
+
+#background {
+    display: block;
+}
+
+canvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+    background-color: transparent;
+    cursor: crosshair;
+}
+
+#tools {
+    margin-left: 20px;
+    display: inline-block;
+    vertical-align: top;
+    background: white;
+    border: 2px solid black;
+    padding: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Graph Drawing Tool</h2>
+
+<div id="canvasholder">
+    <img id="background" src="vending_machine_grid.png">
+    <canvas id="canvas"></canvas>
+</div>
+
+<div id="tools">
+    <p>
+        <b>Tool:</b><br>
+        <select id="tool">
+            <option>Sketch</option>
+            <option>Line</option>
+            <option>Erase</option>
+        </select>
+    </p>
+
+    <p>
+        <button id="clear">Clear</button>
+    </p>
+
+    <p>
+        <button id="save">Save</button>
+    </p>
+</div>
+
+<script>
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
+let background = document.getElementById("background");
+
+let tool = "Sketch";
+let drawing = false;
+
+let startX, startY;
+let prevX, prevY;
+let savedDrawing;
+
+// Resize canvas to match image
+background.onload = function () {
+    canvas.width = background.naturalWidth;
+    canvas.height = background.naturalHeight;
+
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = "red";
+};
+
+// Tool selector
+document.getElementById("tool").onchange = function () {
+    tool = this.value;
+};
+
+// Clear button
+document.getElementById("clear").onclick = function () {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+};
+
+// Save button
+document.getElementById("save").onclick = function () {
+    try {
+        let exportCanvas = document.createElement("canvas");
+        exportCanvas.width = canvas.width;
+        exportCanvas.height = canvas.height;
+
+        let exportCtx = exportCanvas.getContext("2d");
+
+        exportCtx.drawImage(background, 0, 0);
+        exportCtx.drawImage(canvas, 0, 0);
+
+        exportCanvas.toBlob(function (blob) {
+            if (!blob) {
+                alert("Could not create PNG file.");
+                return;
+            }
+
+            let url = URL.createObjectURL(blob);
+            let link = document.createElement("a");
+
+            link.href = url;
+            link.download = "vending-machine-graph.png";
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            setTimeout(function () {
+                URL.revokeObjectURL(url);
+            }, 1000);
+        }, "image/png");
+
+    } catch (err) {
+        alert("Save failed: " + err.message);
+        console.error(err);
+    }
+};
+
+// Mouse handlers
+canvas.addEventListener("mousedown", function (e) {
+    let r = canvas.getBoundingClientRect();
+
+    startX = prevX = e.clientX - r.left;
+    startY = prevY = e.clientY - r.top;
+    drawing = true;
+
+    if (tool === "Line") {
+        savedDrawing = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
+});
+
+canvas.addEventListener("mousemove", function (e) {
+    if (!drawing) return;
+
+    let r = canvas.getBoundingClientRect();
+    let x = e.clientX - r.left;
+    let y = e.clientY - r.top;
+
+    if (tool === "Sketch") {
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    }
+    else if (tool === "Line") {
+        ctx.putImageData(savedDrawing, 0, 0);
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    }
+    else if (tool === "Erase") {
+        ctx.clearRect(x - 5, y - 5, 10, 10);
+    }
+
+    prevX = x;
+    prevY = y;
+});
+
+canvas.addEventListener("mouseup", function (e) {
+    if (!drawing) return;
+    drawing = false;
+
+    let r = canvas.getBoundingClientRect();
+    let x = e.clientX - r.left;
+    let y = e.clientY - r.top;
+
+    if (tool === "Line") {
+        ctx.putImageData(savedDrawing, 0, 0);
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    }
+});
+
+canvas.addEventListener("mouseleave", function () {
+    drawing = false;
+});
+</script>
+
+</body>
+</html>
