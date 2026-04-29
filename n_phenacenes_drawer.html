@@ -8,6 +8,11 @@
     input, button { font-size: 1rem; }
     input { width: 5rem; }
     svg { border: 1px solid #ddd; margin-top: 0.5rem; display: block; }
+    .svgBox {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #ddd;
+}
     line { stroke: #333; stroke-width: 1.5; }
     .carbon { fill: #ffc857; stroke: #333; stroke-width: 0.5; }
     .hydrogen { fill: #000; }
@@ -19,20 +24,20 @@
 
 <p>
   Draw [n]phenacene:
-  <input id="n" type="number" min="1" value="4">
+  <input id="n" type="number" min="3" max="200" value="4">
 </p>
 
 <div class="row">
-  <p>Carbon skeleton only</p>
-  <svg id="molCarbon" width="900" height="220"></svg>
+  <p>C atoms (yellow dots)</p>
+  <svg id="molCarbon" height="220"></svg>
 </div>
 
 <div class="row">
   <p>
-    With hydrogen atoms
+    C atoms (yellow dots) and H atoms (black dots)
     <button id="formulaButton">Show formula</button>
   </p>
-  <svg id="molHydrogen" width="900" height="260"></svg>
+  <svg id="molHydrogen" height="260"></svg>
   <div id="formula"></div>
 </div>
 
@@ -195,7 +200,7 @@ function drawBoth() {
 function showFormula() {
   const n = Math.max(1, Number(input.value));
   formulaDiv.innerHTML =
-    `[${n}]phenacene: C<sub>${4 * n + 2}</sub>H<sub>${2 * n + 4}</sub>`;
+    `Moulecular formula: C<sub>${4 * n + 2}</sub>H<sub>${2 * n + 4}</sub>`;
 }
 
 input.addEventListener("input", drawBoth);
