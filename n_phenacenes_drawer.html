@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>[n]phenacene drawer</title>
+  <title>Molecule patterns 1</title>
   <style>
     body { font-family: sans-serif; margin: 2rem; }
     input, button { font-size: 1rem; }
@@ -23,18 +23,18 @@
 <body>
 
 <p>
-  Draw [n]phenacene:
+  Number of hexagons:
   <input id="n" type="number" min="3" max="200" value="4">
 </p>
 
 <div class="row">
-  <p>C atoms (yellow dots)</p>
+  <p>Showing C atoms (yellow dots) only:</p>
   <svg id="molCarbon" height="220"></svg>
 </div>
 
 <div class="row">
   <p>
-    C atoms (yellow dots) and H atoms (black dots)
+    Showing C atoms (yellow dots) and H atoms (black dots):
     <button id="formulaButton">Show formula</button>
   </p>
   <svg id="molHydrogen" height="260"></svg>
