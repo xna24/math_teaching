@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini GeoGebra 3D</title>
+
+  <!-- Option 1: use Plotly from CDN -->
+  <script src="https://cdn.plot.ly/plotly-3.5.1.min.js" charset="utf-8"></script>
+
+  <!--
+  Option 2: use local file instead.
+  Download plotly-3.5.1.min.js, put it in the same folder as this file,
+  then replace the script above with:
+
+  <script src="plotly-3.5.1.min.js" charset="utf-8"></script>
+  -->
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+
+    .panel {
+      background: white;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      margin-bottom: 16px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 15px;
+      padding: 10px;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+
+    button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    #message {
+      margin-top: 10px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      white-space: pre-wrap;
+    }
+
+    .error {
+      color: #b00020;
+    }
+
+    .ok {
+      color: #006400;
+    }
+
+    #plot {
+      width: 100%;
+      height: 650px;
+      background: white;
+      border-radius: 10px;
+    }
+
+    .hint {
+      color: #555;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Mini GeoGebra 3D</h1>
+
+  <div class="panel">
+    <div class="hint">
+      Syntax examples:<br>
+      <code>Point (3,4,5) red</code><br>
+      <code>Line (0,0,1) to (0,1,0) purple</code><br>
+      Lines starting with <code>#</code> are ignored. Inline comments also work.
+    </div>
+
+    <textarea id="commands">Point (0,0,0)
+Point (1,0,0) blue
+Point (0,1,0) blue
+Point (0,0,1) blue
+
+Line (0,0,0) to (1,0,0)
+Line (0,0,0) to (0,1,0)
+Line (0,0,0) to (0,0,1)</textarea>
+
+    <br>
+    <button onclick="drawFromText()">Draw / Refresh</button>
+
+    <div id="message"></div>
+  </div>
+
+  <div id="plot"></div>
+
+  <script>
+    const DEFAULT_COLOUR = "black";
+
+    function stripComment(line) {
+      const index = line.indexOf("#");
+      if (index === -1) return line.trim();
+      return line.slice(0, index).trim();
+    }
+
+    function parsePointTuple(text) {
+      const match = text.match(/^\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)$/);
+
+      if (!match) {
+        throw new Error(`Invalid coordinate tuple: ${text}`);
+      }
+
+      return {
+        x: Number(match[1]),
+        y: Number(match[2]),
+        z: Number(match[3])
+      };
+    }
+
+    function parseLine(rawLine, lineNumber) {
+      const line = stripComment(rawLine);
+
+      if (line === "") {
+        return null;
+      }
+
+      let pointMatch = line.match(
+        /^Point\s+(\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\))(?:\s+([A-Za-z][A-Za-z0-9_-]*|#[0-9A-Fa-f]{3,6}))?\s*$/i
+      );
+
+      if (pointMatch) {
+        const p = parsePointTuple(pointMatch[1]);
+        const colour = pointMatch[2] || DEFAULT_COLOUR;
+
+        return {
+          type: "point",
+          point: p,
+          colour: colour,
+          label: `(${p.x}, ${p.y}, ${p.z})`
+        };
+      }
+
+      let lineMatch = line.match(
+        /^Line\s+(\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\))\s+to\s+(\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\))(?:\s+([A-Za-z][A-Za-z0-9_-]*|#[0-9A-Fa-f]{3,6}))?\s*$/i
+      );
+
+      if (lineMatch) {
+        const p1 = parsePointTuple(lineMatch[1]);
+        const p2 = parsePointTuple(lineMatch[2]);
+        const colour = lineMatch[3] || DEFAULT_COLOUR;
+
+        return {
+          type: "line",
+          from: p1,
+          to: p2,
+          colour: colour
+        };
+      }
+
+      throw new Error(`Line ${lineNumber}: cannot parse command: ${rawLine}`);
+    }
+
+    function buildTraces(objects) {
+      const traces = [];
+
+      for (const obj of objects) {
+        if (obj.type === "point") {
+          traces.push({
+            type: "scatter3d",
+            mode: "markers+text",
+            x: [obj.point.x],
+            y: [obj.point.y],
+            z: [obj.point.z],
+            text: [obj.label],
+            textposition: "top center",
+            marker: {
+              size: 5,
+              color: obj.colour
+            },
+            name: obj.label,
+            showlegend: false
+          });
+        }
+
+        if (obj.type === "line") {
+          traces.push({
+            type: "scatter3d",
+            mode: "lines+markers",
+            x: [obj.from.x, obj.to.x],
+            y: [obj.from.y, obj.to.y],
+            z: [obj.from.z, obj.to.z],
+            line: {
+              width: 5,
+              color: obj.colour
+            },
+            marker: {
+              size: 4,
+              color: obj.colour
+            },
+            name: "Line",
+            showlegend: false
+          });
+        }
+      }
+
+      return traces;
+    }
+
+    function getBounds(objects) {
+      const xs = [];
+      const ys = [];
+      const zs = [];
+
+      for (const obj of objects) {
+        if (obj.type === "point") {
+          xs.push(obj.point.x);
+          ys.push(obj.point.y);
+          zs.push(obj.point.z);
+        }
+
+        if (obj.type === "line") {
+          xs.push(obj.from.x, obj.to.x);
+          ys.push(obj.from.y, obj.to.y);
+          zs.push(obj.from.z, obj.to.z);
+        }
+      }
+
+      if (xs.length === 0) {
+        return {
+          x: [-1, 1],
+          y: [-1, 1],
+          z: [-1, 1]
+        };
+      }
+
+      const all = xs.concat(ys, zs);
+      const minVal = Math.min(...all);
+      const maxVal = Math.max(...all);
+
+      let pad = 0.5;
+      if (maxVal > minVal) {
+        pad = 0.15 * (maxVal - minVal);
+      }
+
+      return {
+        x: [minVal - pad, maxVal + pad],
+        y: [minVal - pad, maxVal + pad],
+        z: [minVal - pad, maxVal + pad]
+      };
+    }
+
+    function drawFromText() {
+      const text = document.getElementById("commands").value;
+      const message = document.getElementById("message");
+      const lines = text.split(/\r?\n/);
+
+      const objects = [];
+      const errors = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        try {
+          const obj = parseLine(lines[i], i + 1);
+          if (obj !== null) {
+            objects.push(obj);
+          }
+        } catch (err) {
+          errors.push(err.message);
+        }
+      }
+
+      if (errors.length > 0) {
+        message.className = "error";
+        message.textContent = errors.join("\n");
+        return;
+      }
+
+      const traces = buildTraces(objects);
+      const bounds = getBounds(objects);
+
+      const layout = {
+        margin: {
+          l: 0,
+          r: 0,
+          b: 0,
+          t: 0
+        },
+        scene: {
+          xaxis: {
+            title: "x",
+            range: bounds.x,
+            zeroline: true
+          },
+          yaxis: {
+            title: "y",
+            range: bounds.y,
+            zeroline: true
+          },
+          zaxis: {
+            title: "z",
+            range: bounds.z,
+            zeroline: true
+          },
+          aspectmode: "cube",
+          camera: {
+            eye: {
+              x: 1.6,
+              y: 1.6,
+              z: 1.2
+            }
+          }
+        }
+      };
+
+      const config = {
+        responsive: true,
+        scrollZoom: true,
+        displaylogo: false
+      };
+
+      Plotly.react("plot", traces, layout, config);
+
+      message.className = "ok";
+      message.textContent = `Drawn successfully: ${objects.length} object(s).`;
+    }
+
+    drawFromText();
+  </script>
+</body>
+</html>
