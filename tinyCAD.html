@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Mini GeoGebra 3D</title>
+  <title>Tiny CAD</title>
 
   <!-- Option 1: use Plotly from CDN -->
   <script src="https://cdn.plot.ly/plotly-3.5.1.min.js" charset="utf-8"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@14.7.0/lib/browser/math.js"></script>
   <!--
   Option 2: use local file instead.
   Download plotly-3.5.1.min.js, put it in the same folder as this file,
@@ -28,6 +28,11 @@
       font-size: 24px;
     }
 
+    h2 {
+      font-size: 20px;
+      margin-top: 0;
+    }
+
     .panel {
       background: white;
       border-radius: 10px;
@@ -38,12 +43,26 @@
 
     textarea {
       width: 100%;
-      height: 150px;
       font-family: Consolas, Monaco, "Courier New", monospace;
       font-size: 15px;
       padding: 10px;
       box-sizing: border-box;
       resize: vertical;
+    }
+
+    #commands {
+      height: 150px;
+    }
+
+    .coord-box {
+      height: 36px;
+      margin-bottom: 10px;
+    }
+
+    #resultBox {
+      height: 90px;
+      background: #f0f0f0;
+      color: #222;
     }
 
     button {
@@ -54,6 +73,12 @@
     }
 
     #message {
+      margin-top: 10px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      white-space: pre-wrap;
+    }
+
+    #calcMessage {
       margin-top: 10px;
       font-family: Consolas, Monaco, "Courier New", monospace;
       white-space: pre-wrap;
@@ -72,18 +97,27 @@
       height: 650px;
       background: white;
       border-radius: 10px;
+      margin-bottom: 16px;
     }
 
     .hint {
       color: #555;
       font-size: 14px;
       line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-top: 10px;
+      margin-bottom: 4px;
     }
   </style>
 </head>
 
 <body>
-  <h1>Mini GeoGebra 3D</h1>
+  <h1>Tiny CAD</h1>
 
   <div class="panel">
     <div class="hint">
@@ -109,6 +143,27 @@ Line (0,0,0) to (0,0,1)</textarea>
   </div>
 
   <div id="plot"></div>
+
+  <div class="panel">
+    <h2>Plane cross section calculator</h2>
+    Input below coordinates of 3 points on the plane you wish to use
+
+    <label for="pointInput1">Point 1</label>
+    <textarea id="pointInput1" class="coord-box">(1,0,0)</textarea>
+
+    <label for="pointInput2">Point 2</label>
+    <textarea id="pointInput2" class="coord-box">(0,1,0)</textarea>
+
+    <label for="pointInput3">Point 3</label>
+    <textarea id="pointInput3" class="coord-box">(0,0,1)</textarea>
+
+    <button onclick="calculateFromInputs()">Generate</button>
+
+    <div id="calcMessage"></div>
+
+    <label for="resultBox">Plane drawing guide</label>
+    <textarea id="resultBox" readonly></textarea>
+  </div>
 
   <script>
     const DEFAULT_COLOUR = "black";
@@ -337,6 +392,183 @@ Line (0,0,0) to (0,0,1)</textarea>
 
       message.className = "ok";
       message.textContent = `Drawn successfully: ${objects.length} object(s).`;
+    }
+
+    /*
+      This is the function for you to edit later.
+
+      It receives:
+      x1, y1, z1 from the first point
+      x2, y2, z2 from the second point
+      x3, y3, z3 from the third point
+
+      For now, it returns just x1 and y2.
+    */
+    
+    function rank3x3(A, tolerance = 1e-10) {
+      /*
+        A should be a 3 by 3 array, for example:
+    
+        const A = [
+          [x1, y1, z1],
+          [x2, y2, z2],
+          [x3, y3, z3]
+        ];
+      */
+    
+      // Rank 3 iff the 3 by 3 determinant is non-zero
+      if (Math.abs(math.det(A)) > tolerance) {
+        return 3;
+      }
+    
+      // All possible 2 by 2 minors
+      const minors = [
+        [[A[0][0], A[0][1]], [A[1][0], A[1][1]]],
+        [[A[0][0], A[0][2]], [A[1][0], A[1][2]]],
+        [[A[0][1], A[0][2]], [A[1][1], A[1][2]]],
+    
+        [[A[0][0], A[0][1]], [A[2][0], A[2][1]]],
+        [[A[0][0], A[0][2]], [A[2][0], A[2][2]]],
+        [[A[0][1], A[0][2]], [A[2][1], A[2][2]]],
+    
+        [[A[1][0], A[1][1]], [A[2][0], A[2][1]]],
+        [[A[1][0], A[1][2]], [A[2][0], A[2][2]]],
+        [[A[1][1], A[1][2]], [A[2][1], A[2][2]]]
+      ];
+    
+      // Rank at least 2 iff at least one 2 by 2 minor is non-zero
+      for (const M of minors) {
+        if (Math.abs(math.det(M)) > tolerance) {
+          return 2;
+        }
+      }
+    
+      // Rank at least 1 iff at least one entry is non-zero
+      for (const row of A) {
+        for (const entry of row) {
+          if (Math.abs(entry) > tolerance) {
+            return 1;
+          }
+        }
+      }
+    
+      return 0;
+    }
+    
+    function normal_rank2_case(
+      x1, y1, z1,
+      x2, y2, z2,
+      x3, y3, z3,
+      tolerance = 1e-10
+    ) {
+      const v1 = [x1, y1, z1];
+      const v2 = [x2, y2, z2];
+      const v3 = [x3, y3, z3];
+    
+      const candidates = [
+        math.cross(v1, v2),
+        math.cross(v1, v3),
+        math.cross(v2, v3)
+      ];
+    
+      for (const n of candidates) {
+        if (math.norm(n) > tolerance) {return n;}
+      }
+    
+      throw new Error("Could not find a non-zero cross product. The input vectors may have rank less than 2.");
+    }
+    
+    function normal_rank3_case(
+      x1, y1, z1,
+      x2, y2, z2,
+      x3, y3, z3
+    ) {
+      const A = [
+        [x1, y1, z1],
+        [x2, y2, z2],
+        [x3, y3, z3]
+      ];
+    
+      const b = [1, 1, 1];
+    
+      const solution = math.lusolve(A, b);
+    
+      const normal_A = solution[0][0];
+      const normal_B = solution[1][0];
+      const normal_C = solution[2][0];
+    
+      return [normal_A, normal_B, normal_C];
+    }
+    
+    function plane_normal(x1, y1, z1, x2, y2, z2, x3, y3, z3) {
+      const A = [
+        [x1, y1, z1],
+        [x2, y2, z2],
+        [x3, y3, z3]
+      ];
+    
+      const rank = rank3x3(A);
+      
+      if (rank <= 1) {
+        throw "They do not determine a plane.";
+      } else if (rank == 2) {
+        const normal = normal_rank2_case(
+          x1, y1, z1,
+          x2, y2, z2,
+          x3, y3, z3
+        );
+        
+        return normal.concat([0]);
+      
+      } else if (rank == 3){
+        const normal = normal_rank3_case(
+          x1, y1, z1,
+          x2, y2, z2,
+          x3, y3, z3
+        );
+        
+        return normal.concat([1]);
+      }
+    }
+    
+
+
+    function calculateFromInputs() {
+      const calcMessage = document.getElementById("calcMessage");
+      const resultBox = document.getElementById("resultBox");
+
+      try {
+        const p1 = parsePointTuple(document.getElementById("pointInput1").value.trim());
+        const p2 = parsePointTuple(document.getElementById("pointInput2").value.trim());
+        const p3 = parsePointTuple(document.getElementById("pointInput3").value.trim());
+
+        const x1 = p1.x;
+        const y1 = p1.y;
+        const z1 = p1.z;
+
+        const x2 = p2.x;
+        const y2 = p2.y;
+        const z2 = p2.z;
+
+        const x3 = p3.x;
+        const y3 = p3.y;
+        const z3 = p3.z;
+
+        const answer = plane_normal(
+          x1, y1, z1,
+          x2, y2, z2,
+          x3, y3, z3
+        );
+
+        resultBox.value = `answer = ${answer.join(", ")}`;
+
+        calcMessage.className = "ok";
+        calcMessage.textContent = "Calculation successful.";
+      } catch (err) {
+        calcMessage.className = "error";
+        calcMessage.textContent = String(err);
+        resultBox.value = "";
+      }
     }
 
     drawFromText();
