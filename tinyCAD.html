@@ -93,7 +93,7 @@
     }
 
     #plot {
-      width: 100%;
+      width: 85%;
       height: 650px;
       background: white;
       border-radius: 10px;
@@ -139,6 +139,48 @@ Line (0,0,0) to (0,0,1)</textarea>
     <br>
     <button onclick="drawFromText()">Draw / Refresh</button>
 
+<button id="showTextButton">Show me code for cube</button>
+
+<dialog id="textDialog">
+  <textarea readonly rows="8" cols="50">
+Line (0,0,0) to (1,0,0)
+Line (0,0,0) to (0,1,0)
+Line (0,0,0) to (0,0,1)
+
+Line (1,0,0) to (1,1,0)
+Line (1,0,0) to (1,0,1)
+
+Line (0,1,0) to (1,1,0)
+Line (0,1,0) to (0,1,1)
+
+Line (0,0,1) to (1,0,1)
+Line (0,0,1) to (0,1,1)
+
+Line (1,1,0) to (1,1,1)
+Line (1,0,1) to (1,1,1)
+Line (0,1,1) to (1,1,1)
+  </textarea>
+
+  <br>
+
+  <button id="closeTextButton">OK</button>
+</dialog>
+
+<script>
+  const textDialog = document.getElementById("textDialog");
+  const showTextButton = document.getElementById("showTextButton");
+  const closeTextButton = document.getElementById("closeTextButton");
+
+  showTextButton.addEventListener("click", () => {
+    textDialog.showModal();
+  });
+
+  closeTextButton.addEventListener("click", () => {
+    textDialog.close();
+  });
+</script>
+
+
     <div id="message"></div>
   </div>
 
@@ -146,22 +188,22 @@ Line (0,0,0) to (0,0,1)</textarea>
 
   <div class="panel">
     <h2>Plane cross section calculator</h2>
-    Input below coordinates of 3 points on the plane you wish to use
+    Give me 3 points and I'll show you a plane through them
 
     <label for="pointInput1">Point 1</label>
-    <textarea id="pointInput1" class="coord-box">(1,0,0)</textarea>
+    <textarea id="pointInput1" class="coord-box">(1,0.5,0)</textarea>
 
     <label for="pointInput2">Point 2</label>
-    <textarea id="pointInput2" class="coord-box">(0,1,0)</textarea>
+    <textarea id="pointInput2" class="coord-box">(0.5,1,0)</textarea>
 
     <label for="pointInput3">Point 3</label>
-    <textarea id="pointInput3" class="coord-box">(0,0,1)</textarea>
+    <textarea id="pointInput3" class="coord-box">(1,0,0.5)</textarea>
 
     <button onclick="calculateFromInputs()">Generate</button>
 
     <div id="calcMessage"></div>
 
-    <label for="resultBox">Plane drawing guide</label>
+    <label for="resultBox">Guide to draw cross section</label>
     <textarea id="resultBox" readonly></textarea>
   </div>
 
@@ -531,8 +573,119 @@ Line (0,0,0) to (0,0,1)</textarea>
       }
     }
     
-
-
+    // return True iff the plane cut through the cube 
+    // i.e., some of the 8 vertices on one side, some on the other side
+    function valid_plane(plane, tolerance = 1e-10) {
+      const cube_vertices = [[0,0,0],[0,0,1],[0,1,0],[1,0,0],
+                             [0,1,1],[1,0,1],[1,1,0],[1,1,1]];
+      const values = cube_vertices.map(([x,y,z]) => {
+        const ptVector = [x,y,z,-1];
+        return math.dot(plane, ptVector);
+      });
+      
+      const hasPos = values.some(value => value > tolerance);
+      const hasNeg = values.some(value => value < -tolerance);
+      
+      return hasPos && hasNeg
+    }
+    
+    function edge_plane_intersect(plane, edge) {
+      const [A,B,C,D] = plane;
+      const [p1,p2] = edge;
+      const [x1,y1,z1] = p1;
+      const [x2,y2,z2] = p2;
+      const denom = A*(x1-x2)+B*(y1-y2)+C*(z1-z2);
+      const numerator = A*x1+B*y1+C*z1-D;
+      if (denom == 0 && numerator == 0) {
+        // edge on plane
+        return edge;
+      } else if (denom == 0 && numerator != 0) {
+        // edge parallel to plane
+        return [];
+      } else {
+        const t = numerator / denom;
+        if (t >= 0 && t <= 1) {
+          return [math.add(math.multiply(1-t,p1), math.multiply(t,p2))];
+        } else {
+          return [];
+        }
+      }
+    }
+    
+    function orderCoplanarPoints(points, normal) {
+      // 1. Compute centroid
+      const center = math.divide(
+        points.reduce((sum, p) => math.add(sum, p), [0, 0, 0]),
+        points.length
+      );
+    
+      // 2. Normalize the plane normal
+      const n = math.divide(normal, math.norm(normal));
+    
+      // 3. Pick a reference direction inside the plane
+      // Use vector from center to first point
+      let u = math.subtract(points[0], center);
+      u = math.divide(u, math.norm(u));
+    
+      // 4. Build second in-plane direction perpendicular to u
+      const v = math.cross(n, u);
+    
+      // 5. Sort points by angle around center
+      const sorted = points.slice().sort((p, q) => {
+        const dp = math.subtract(p, center);
+        const dq = math.subtract(q, center);
+    
+        const angleP = Math.atan2(
+          math.dot(dp, v),
+          math.dot(dp, u)
+        );
+    
+        const angleQ = Math.atan2(
+          math.dot(dq, v),
+          math.dot(dq, u)
+        );
+    
+        return angleP - angleQ;
+      });
+    
+      return sorted;
+    }
+    
+    // Gets rid of redundancy in "points"
+    function uniquePoints(points, decimals = 9) {
+      const seen = new Set();
+    
+      return points.filter(point => {
+        const key = point
+          .map(value => Number(value).toFixed(decimals))
+          .join(",");
+    
+        if (seen.has(key)) {
+          return false;
+        }
+    
+        seen.add(key);
+        return true;
+      });
+    }
+    
+    // Turn an array [1,2,3] into string "(1,2,3)"
+    function pointToString(point) {
+      const [x,y,z] = point;
+      return `(${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)})`;
+    }
+    
+    // Turn a list of points (array of length 3) into "Line" command strings
+    function polygonLinesToString(points) {
+      return points
+        .map((point, i) => {
+          const nextPoint = points[(i + 1) % points.length];
+    
+          return `Line ${pointToString(point)} to ${pointToString(nextPoint)}`;
+        })
+        .join("\n");
+    }
+    
     function calculateFromInputs() {
       const calcMessage = document.getElementById("calcMessage");
       const resultBox = document.getElementById("resultBox");
@@ -553,14 +706,73 @@ Line (0,0,0) to (0,0,1)</textarea>
         const x3 = p3.x;
         const y3 = p3.y;
         const z3 = p3.z;
+        
+        // the 12 edges
+        const edges = [[[0,0,0],[1,0,0]], [[0,0,0],[0,1,0]], [[0,0,0],[0,0,1]],
+                       [[1,0,0],[1,1,0]], [[1,0,0],[1,0,1]], 
+                       [[0,1,0],[1,1,0]], [[0,1,0],[0,1,1]],
+                       [[0,0,1],[1,0,1]], [[0,0,1],[0,1,1]],
+                       [[1,1,0],[1,1,1]], [[1,0,1],[1,1,1]], [[0,1,1],[1,1,1]]];
 
-        const answer = plane_normal(
+        const plane = plane_normal(
           x1, y1, z1,
           x2, y2, z2,
           x3, y3, z3
         );
-
-        resultBox.value = `answer = ${answer.join(", ")}`;
+        // the actual plane is Ax+By+Cz=D,
+        // the array `plane` is [A,B,C,D]
+        const [A,B,C,D] = plane;
+        const valid = valid_plane(plane);
+        
+        // resultBox.value = `plane: ${plane.join(", ")}`;
+        
+        resultBox.value = `Plane equation: `;
+        if (A != 0) {
+          resultBox.value += `${A.toFixed(3)}x`;
+        }
+        if (B > 0) {
+          resultBox.value += ` + ${B.toFixed(3)}y`;
+        } else if (B < 0) {
+          resultBox.value += ` - ${-B.toFixed(3)}y`;
+        }
+        
+        if (C > 0) {
+          resultBox.value += ` + ${C.toFixed(3)}z`;
+        } else if (C < 0) {
+          resultBox.value += ` - ${-C.toFixed(3)}z`;
+        }
+        
+        resultBox.value += ` = ${D.toFixed(3)}`;
+        
+        if (!valid) {
+          resultBox.value += `\nPlane does not cut through cube`;
+        } else {
+          let pt_list = [];
+          for (const edge of edges) {
+            const pts = edge_plane_intersect(plane, edge);
+            pt_list = pt_list.concat(pts);
+          }
+          
+          pt_list = uniquePoints(pt_list);
+          
+          if (pt_list.length >= 3) {
+            pt_list = orderCoplanarPoints(pt_list, [A,B,C]);
+          }
+          
+          resultBox.value += `\nConsider these commands:\n`;
+          
+          resultBox.value += polygonLinesToString(pt_list);
+          
+          //for (pt of pt_list) {
+          //  const [x,y,z] = pt;
+          //  resultBox.value += `(${x.toFixed(3)}, ${y.toFixed(3)}, ${z.toFixed(3)})\n`
+          //}
+          
+          // resultBox.value += `${JSON.stringify(pt_list)}`;
+        
+          // const res = edge_plane_intersect(plane, edges[7]);
+          // resultBox.value += `${JSON.stringify(res)}`;
+        }
 
         calcMessage.className = "ok";
         calcMessage.textContent = "Calculation successful.";
