@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quadratic Graph Explorer</title>
+
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+  <!-- MathJax -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 28px;
+      line-height: 1.5;
+      color: #222;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+    }
+
+    .intro {
+      max-width: 900px;
+      margin-bottom: 20px;
+    }
+
+    .equation-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 22px;
+    }
+
+    .equation-row input {
+      width: 95px;
+      font-size: 20px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+
+    button {
+      font-size: 16px;
+      padding: 8px 16px;
+      cursor: pointer;
+      margin-bottom: 14px;
+    }
+
+    #message {
+      min-height: 24px;
+      font-weight: bold;
+      color: darkred;
+      margin-bottom: 12px;
+    }
+
+    .main-area {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      max-width: 1180px;
+    }
+
+    .plot-column {
+      width: 900px;
+      max-width: 100%;
+    }
+
+    #plot {
+      width: 900px;
+      max-width: 100%;
+      height: 620px;
+      border: 1px solid #aaa;
+    }
+
+    .freeze-controls {
+      display: none;
+      margin-top: 14px;
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      border: 1px solid #bbb;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+
+    .freeze-controls.active {
+      display: block;
+    }
+
+    .freeze-controls h2 {
+      font-size: 17px;
+      margin: 0 0 10px 0;
+    }
+
+    .slider-row {
+      display: grid;
+      grid-template-columns: 28px 1fr 76px;
+      gap: 10px;
+      align-items: center;
+      margin: 8px 0;
+      font-size: 15px;
+    }
+
+    .slider-row input[type="range"] {
+      width: 100%;
+    }
+
+    .slider-value {
+      font-family: Consolas, "Courier New", monospace;
+      text-align: right;
+    }
+
+    #freezeBtn {
+      margin-top: 2px;
+    }
+
+    .feature-panel {
+      width: 245px;
+      border: 1px solid #bbb;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #fafafa;
+      font-size: 14px;
+    }
+
+    .feature-panel h2 {
+      font-size: 17px;
+      margin: 0 0 10px 0;
+    }
+
+    .feature-item {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      column-gap: 6px;
+      margin-bottom: 12px;
+      align-items: start;
+    }
+
+    .feature-item input {
+      margin-top: 4px;
+    }
+
+    .feature-name {
+      font-weight: bold;
+    }
+
+    .feature-value {
+      color: #444;
+      font-family: Consolas, "Courier New", monospace;
+      margin-top: 2px;
+      word-break: break-word;
+    }
+
+    .small-note {
+      color: #444;
+      font-size: 14px;
+      margin-top: 8px;
+      max-width: 900px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Quadratic Graph Explorer</h1>
+
+  <div class="intro">
+    Enter numerical values for the coefficients \(a\), \(b\), and \(c\), then click
+    <strong>Draw/Update</strong> to graph the quadratic.
+    The graph is drawn for equations of the form \(y=ax^2+bx+c\), with \(a\neq 0\).
+  </div>
+
+  <div class="equation-row">
+    <span>\(y=\)</span>
+    <input id="aInput" type="text" inputmode="decimal" value="1" />
+
+    <span>\(x^2 + (\)</span>
+    <input id="bInput" type="text" inputmode="decimal" value="-4" />
+
+    <span>\()x + (\)</span>
+    <input id="cInput" type="text" inputmode="decimal" value="1" />
+    <span>\()\)</span>
+  </div>
+
+  <button id="drawBtn">Draw / Update</button>
+
+  <div id="message"></div>
+
+  <div class="main-area">
+    <div class="plot-column">
+      <div id="plot"></div>
+
+      <div id="sliderControls" class="freeze-controls">
+        <h2>Frozen coefficient controls</h2>
+
+        <div class="slider-row">
+          <label for="aSlider">\(a\)</label>
+          <input id="aSlider" type="range" />
+          <span id="aSliderValue" class="slider-value">1.000</span>
+        </div>
+
+        <div class="slider-row">
+          <label for="bSlider">\(b\)</label>
+          <input id="bSlider" type="range" />
+          <span id="bSliderValue" class="slider-value">-4.000</span>
+        </div>
+
+        <div class="slider-row">
+          <label for="cSlider">\(c\)</label>
+          <input id="cSlider" type="range" />
+          <span id="cSliderValue" class="slider-value">1.000</span>
+        </div>
+      </div>
+
+      <button id="freezeBtn">Freeze</button>
+    </div>
+
+    <div class="feature-panel">
+      <h2>Show / Hide Features</h2>
+
+      <label class="feature-item">
+        <input id="axesToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">x-axis and y-axis</span>
+          <div id="axesInfo" class="feature-value">x = 0, y = 0</div>
+        </span>
+      </label>
+
+      <label class="feature-item">
+        <input id="symmetryToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">Axis of symmetry</span>
+          <div id="symmetryInfo" class="feature-value">x = ...</div>
+        </span>
+      </label>
+
+      <label class="feature-item">
+        <input id="vertexToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">Vertex</span>
+          <div id="vertexInfo" class="feature-value">(..., ...)</div>
+        </span>
+      </label>
+
+      <label class="feature-item">
+        <input id="rootsToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">Real solutions</span>
+          <div id="rootsInfo" class="feature-value">...</div>
+        </span>
+      </label>
+
+      <label class="feature-item">
+        <input id="yInterceptToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">y-intercept</span>
+          <div id="yInterceptInfo" class="feature-value">(0.000, ...)</div>
+        </span>
+      </label>
+
+      <label class="feature-item">
+        <input id="focusToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">Focus</span>
+          <div id="focusInfo" class="feature-value">(..., ...)</div>
+        </span>
+      </label>
+
+      <label class="feature-item">
+        <input id="directrixToggle" type="checkbox" />
+        <span>
+          <span class="feature-name">Directrix</span>
+          <div id="directrixInfo" class="feature-value">y = ...</div>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <div class="small-note">
+    In the unfrozen state, <strong>Draw/Update</strong> recentres the view using the vertex.
+    In the frozen state, the current viewing box is preserved while the coefficient sliders change the graph.
+    The curve is recalculated from the current x-range, so panning and then changing coefficients should not cut the graph off.
+  </div>
+
+  <script>
+    const EPS = 1e-12;
+
+    let isFrozen = false;
+    let frozenBounds = null;
+
+    function showError(msg) {
+      document.getElementById("message").textContent = msg;
+    }
+
+    function clearError() {
+      document.getElementById("message").textContent = "";
+    }
+
+    function parseCoefficient(value, name) {
+      const trimmed = value.trim();
+
+      if (trimmed === "") {
+        throw new Error(`Please enter a value for ${name}.`);
+      }
+
+      const numberPattern = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+      if (!numberPattern.test(trimmed)) {
+        throw new Error(
+          `The coefficient ${name} must be a number, such as 3, -5.26, or 1.4E-5.`
+        );
+      }
+
+      const num = Number(trimmed);
+
+      if (!Number.isFinite(num)) {
+        throw new Error(`The coefficient ${name} is too large or too small to use.`);
+      }
+
+      return num;
+    }
+
+    function getVertex(a, b, c) {
+      const h = -b / (2 * a);
+      const k = a * h * h + b * h + c;
+      return { h, k };
+    }
+
+    function f(a, b, c, x) {
+      return a * x * x + b * x + c;
+    }
+
+    function three(num) {
+      if (!Number.isFinite(num)) return "undefined";
+      if (Math.abs(num) < 0.0005) return "0.000";
+      return num.toFixed(3);
+    }
+
+    function formatNumber(num) {
+      if (Math.abs(num) < 1e-12) return "0";
+
+      if (Math.abs(num) >= 1e6 || Math.abs(num) < 1e-4) {
+        return num.toExponential(4);
+      }
+
+      return Number(num.toFixed(6)).toString();
+    }
+
+    function formatEquation(a, b, c) {
+      return `y = ${formatNumber(a)}x² + (${formatNumber(b)})x + (${formatNumber(c)})`;
+    }
+
+    function getCurrentCoefficients(options = {}) {
+      const allowAZero = options.allowAZero || false;
+
+      const a = parseCoefficient(document.getElementById("aInput").value, "a");
+      const b = parseCoefficient(document.getElementById("bInput").value, "b");
+      const c = parseCoefficient(document.getElementById("cInput").value, "c");
+
+      if (!allowAZero && Math.abs(a) < EPS) {
+        throw new Error("This is not a quadratic. Please make sure a ≠ 0.");
+      }
+
+      return { a, b, c };
+    }
+
+    function getCurrentView() {
+      const plot = document.getElementById("plot");
+
+      const xRange =
+        plot.layout && plot.layout.xaxis && Array.isArray(plot.layout.xaxis.range)
+          ? plot.layout.xaxis.range.slice()
+          : plot._fullLayout && plot._fullLayout.xaxis && Array.isArray(plot._fullLayout.xaxis.range)
+            ? plot._fullLayout.xaxis.range.slice()
+            : null;
+
+      const yRange =
+        plot.layout && plot.layout.yaxis && Array.isArray(plot.layout.yaxis.range)
+          ? plot.layout.yaxis.range.slice()
+          : plot._fullLayout && plot._fullLayout.yaxis && Array.isArray(plot._fullLayout.yaxis.range)
+            ? plot._fullLayout.yaxis.range.slice()
+            : null;
+
+      if (!xRange || !yRange) {
+        return null;
+      }
+
+      return { xRange, yRange };
+    }
+
+    function checkboxIsOn(id) {
+      return document.getElementById(id).checked;
+    }
+
+    function getRoots(a, b, c) {
+      if (Math.abs(a) < EPS) {
+        if (Math.abs(b) < EPS) return [];
+        return [-c / b];
+      }
+
+      const discriminant = b * b - 4 * a * c;
+
+      if (discriminant < -1e-12) {
+        return [];
+      }
+
+      if (Math.abs(discriminant) <= 1e-12) {
+        return [-b / (2 * a)];
+      }
+
+      const sqrtD = Math.sqrt(discriminant);
+      const r1 = (-b - sqrtD) / (2 * a);
+      const r2 = (-b + sqrtD) / (2 * a);
+
+      return [Math.min(r1, r2), Math.max(r1, r2)];
+    }
+
+    function updateFeaturePanel(a, b, c, data) {
+      document.getElementById("axesInfo").textContent = "x = 0, y = 0";
+      document.getElementById("yInterceptInfo").textContent = `(0.000, ${three(c)})`;
+
+      const roots = data.roots;
+      if (roots.length === 0) {
+        document.getElementById("rootsInfo").textContent = "No real solutions";
+      } else if (roots.length === 1) {
+        document.getElementById("rootsInfo").textContent = `(${three(roots[0])}, 0.000)`;
+      } else {
+        document.getElementById("rootsInfo").textContent =
+          `(${three(roots[0])}, 0.000), (${three(roots[1])}, 0.000)`;
+      }
+
+      if (Math.abs(a) < EPS) {
+        document.getElementById("symmetryInfo").textContent = "Not defined when a = 0";
+        document.getElementById("vertexInfo").textContent = "Not defined when a = 0";
+        document.getElementById("focusInfo").textContent = "Not defined when a = 0";
+        document.getElementById("directrixInfo").textContent = "Not defined when a = 0";
+      } else {
+        document.getElementById("symmetryInfo").textContent = `x = ${three(data.h)}`;
+        document.getElementById("vertexInfo").textContent = `(${three(data.h)}, ${three(data.k)})`;
+        document.getElementById("focusInfo").textContent = `(${three(data.h)}, ${three(data.focusY)})`;
+        document.getElementById("directrixInfo").textContent = `y = ${three(data.directrixY)}`;
+      }
+    }
+
+    function makeMathData(a, b, c) {
+      const roots = getRoots(a, b, c);
+
+      if (Math.abs(a) < EPS) {
+        return { roots };
+      }
+
+      const { h, k } = getVertex(a, b, c);
+      const focusY = k + 1 / (4 * a);
+      const directrixY = k - 1 / (4 * a);
+
+      return { h, k, focusY, directrixY, roots };
+    }
+
+    function computeAutomaticView(a, b, c, data) {
+      const absA = Math.abs(a);
+      const h = data.h;
+      const k = data.k;
+
+      const xViewMin = h - 1 / absA;
+      const xViewMax = h + 1 / absA;
+
+      let yViewMin;
+      let yViewMax;
+
+      if (a > 0) {
+        yViewMin = k - 0.25 / absA;
+        yViewMax = k + 1 / absA;
+      } else {
+        yViewMin = k - 1 / absA;
+        yViewMax = k + 0.25 / absA;
+      }
+
+      return {
+        xRange: [xViewMin, xViewMax],
+        yRange: [yViewMin, yViewMax]
+      };
+    }
+
+    function makeXValuesFromView(xRange) {
+      /*
+        The graph is computed from the current visible x-range, not directly from a.
+        This is important in frozen mode: students can pan to a region, move sliders,
+        and the curve will be recomputed around the region they are actually viewing.
+      */
+      let left;
+      let right;
+
+      if (xRange && xRange.length === 2 && Number.isFinite(xRange[0]) && Number.isFinite(xRange[1])) {
+        left = Math.min(xRange[0], xRange[1]);
+        right = Math.max(xRange[0], xRange[1]);
+      } else {
+        left = -10;
+        right = 10;
+      }
+
+      let span = right - left;
+
+      if (!Number.isFinite(span) || span < EPS) {
+        span = 1;
+        const centre = Number.isFinite(left) ? left : 0;
+        left = centre - 0.5;
+        right = centre + 0.5;
+      }
+
+      // Draw one extra visible-width on each side, so panning a little does not
+      // immediately reveal an empty region.
+      const xPlotMin = left - span;
+      const xPlotMax = right + span;
+
+      // Keep the number of plotted points stable, regardless of a.
+      const numberOfPoints = 1200;
+      const step = (xPlotMax - xPlotMin) / numberOfPoints;
+
+      const xValues = [];
+      for (let i = 0; i <= numberOfPoints; i++) {
+        xValues.push(xPlotMin + i * step);
+      }
+
+      return xValues;
+    }
+
+    function addFeatureTracesAndShapes(traces, shapes, annotations, a, b, c, data) {
+      const roots = data.roots;
+      const hasQuadraticFeatures = Math.abs(a) >= EPS;
+
+      if (checkboxIsOn("axesToggle")) {
+        shapes.push(
+          {
+            type: "line",
+            xref: "paper",
+            yref: "y",
+            x0: 0,
+            x1: 1,
+            y0: 0,
+            y1: 0,
+            line: { color: "black", width: 4 }
+          },
+          {
+            type: "line",
+            xref: "x",
+            yref: "paper",
+            x0: 0,
+            x1: 0,
+            y0: 0,
+            y1: 1,
+            line: { color: "black", width: 4 }
+          }
+        );
+
+        annotations.push(
+          {
+            xref: "paper",
+            yref: "y",
+            x: 0.98,
+            y: 0,
+            text: "y = 0",
+            showarrow: false,
+            xanchor: "right",
+            yanchor: "bottom",
+            font: { size: 13, color: "black" }
+          },
+          {
+            xref: "x",
+            yref: "paper",
+            x: 0,
+            y: 0.98,
+            text: "x = 0",
+            showarrow: false,
+            xanchor: "left",
+            yanchor: "top",
+            font: { size: 13, color: "black" }
+          }
+        );
+      }
+
+      if (checkboxIsOn("symmetryToggle") && hasQuadraticFeatures) {
+        shapes.push({
+          type: "line",
+          xref: "x",
+          yref: "paper",
+          x0: data.h,
+          x1: data.h,
+          y0: 0,
+          y1: 1,
+          line: { color: "blue", width: 4, dash: "dot" }
+        });
+
+        annotations.push({
+          xref: "x",
+          yref: "paper",
+          x: data.h,
+          y: 0.98,
+          text: `x = ${three(data.h)}`,
+          showarrow: false,
+          xanchor: "left",
+          yanchor: "top",
+          font: { size: 13, color: "blue" }
+        });
+      }
+
+      if (checkboxIsOn("vertexToggle") && hasQuadraticFeatures) {
+        traces.push({
+          x: [data.h],
+          y: [data.k],
+          mode: "markers+text",
+          name: "Vertex",
+          text: [`(${three(data.h)}, ${three(data.k)})`],
+          textposition: "top center",
+          marker: { size: 14, color: "red" }
+        });
+      }
+
+      if (checkboxIsOn("rootsToggle") && roots.length > 0) {
+        traces.push({
+          x: roots,
+          y: roots.map(() => 0),
+          mode: "markers+text",
+          name: "Real solutions",
+          text: roots.map(root => `(${three(root)}, 0.000)`),
+          textposition: "bottom center",
+          marker: { size: 11, color: "green" }
+        });
+      }
+
+      if (checkboxIsOn("yInterceptToggle")) {
+        traces.push({
+          x: [0],
+          y: [c],
+          mode: "markers+text",
+          name: "y-intercept",
+          text: [`(0.000, ${three(c)})`],
+          textposition: "top right",
+          marker: { size: 11, color: "purple" }
+        });
+      }
+
+      if (checkboxIsOn("focusToggle") && hasQuadraticFeatures) {
+        traces.push({
+          x: [data.h],
+          y: [data.focusY],
+          mode: "markers+text",
+          name: "Focus",
+          text: [`Focus (${three(data.h)}, ${three(data.focusY)})`],
+          textposition: "top center",
+          marker: { size: 11, color: "orange" }
+        });
+      }
+
+      if (checkboxIsOn("directrixToggle") && hasQuadraticFeatures) {
+        shapes.push({
+          type: "line",
+          xref: "paper",
+          yref: "y",
+          x0: 0,
+          x1: 1,
+          y0: data.directrixY,
+          y1: data.directrixY,
+          line: { color: "brown", width: 3, dash: "dot" }
+        });
+
+        annotations.push({
+          xref: "paper",
+          yref: "y",
+          x: 0.98,
+          y: data.directrixY,
+          text: `y = ${three(data.directrixY)}`,
+          showarrow: false,
+          xanchor: "right",
+          yanchor: "bottom",
+          font: { size: 13, color: "brown" }
+        });
+      }
+    }
+
+    function drawGraph(options = {}) {
+      const allowAZero = options.allowAZero || false;
+      const preserveView = options.preserveView || false;
+      clearError();
+
+      let a, b, c;
+
+      try {
+        ({ a, b, c } = getCurrentCoefficients({ allowAZero }));
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+
+      const data = makeMathData(a, b, c);
+      updateFeaturePanel(a, b, c, data);
+
+      if (allowAZero && Math.abs(a) < EPS) {
+        showError("a is currently 0, so this is not a quadratic. The graph is kept as y = bx + c for now.");
+      }
+
+      let finalXRange;
+      let finalYRange;
+
+      if (preserveView && options.xRange && options.yRange) {
+        finalXRange = options.xRange;
+        finalYRange = options.yRange;
+      } else if (Math.abs(a) >= EPS) {
+        const autoView = computeAutomaticView(a, b, c, data);
+        finalXRange = autoView.xRange;
+        finalYRange = autoView.yRange;
+      } else {
+        finalXRange = [-10, 10];
+        finalYRange = [-10, 10];
+      }
+
+      const xValues = makeXValuesFromView(finalXRange);
+      const yValues = xValues.map(x => f(a, b, c, x));
+
+      const traces = [
+        {
+          x: xValues,
+          y: yValues,
+          mode: "lines",
+          name: "Graph",
+          line: { width: 3 }
+        }
+      ];
+
+      const shapes = [];
+      const annotations = [];
+
+      addFeatureTracesAndShapes(traces, shapes, annotations, a, b, c, data);
+
+      const layout = {
+        uirevision: isFrozen ? "frozen-view" : "unfrozen-view",
+        dragmode: "pan",
+
+        title: {
+          text: formatEquation(a, b, c),
+          font: { size: 20 }
+        },
+
+        xaxis: {
+          title: "x",
+          range: finalXRange,
+          showgrid: true,
+          zeroline: false,
+          showline: true,
+          mirror: "ticks",
+          ticks: "outside",
+          linewidth: 2,
+          linecolor: "black",
+          tickfont: { size: 14 }
+        },
+
+        yaxis: {
+          title: "y",
+          range: finalYRange,
+          showgrid: true,
+          zeroline: false,
+          showline: true,
+          mirror: "ticks",
+          ticks: "outside",
+          linewidth: 2,
+          linecolor: "black",
+          tickfont: { size: 14 },
+          scaleanchor: "x",
+          scaleratio: 1
+        },
+
+        shapes: shapes,
+        annotations: annotations,
+
+        margin: {
+          l: 70,
+          r: 40,
+          t: 70,
+          b: 65
+        },
+
+        showlegend: false
+      };
+
+      const config = {
+        responsive: true,
+        displayModeBar: true,
+        scrollZoom: false
+      };
+
+      Plotly.react("plot", traces, layout, config);
+    }
+
+    function updateFeaturesOnly() {
+      const currentView = getCurrentView();
+
+      drawGraph({
+        preserveView: true,
+        xRange: currentView ? currentView.xRange : null,
+        yRange: currentView ? currentView.yRange : null,
+        allowAZero: isFrozen
+      });
+    }
+
+    function coefficientRangeFromInitial(value) {
+      const radius = 5 * Math.abs(value);
+      return { min: -radius, max: radius };
+    }
+
+    function sliderStep(min, max) {
+      const span = Math.abs(max - min);
+      if (span < EPS) return 0.001;
+      return span / 1000;
+    }
+
+    function setupOneSlider(sliderId, valueId, inputId, min, max, value) {
+      const slider = document.getElementById(sliderId);
+      const valueLabel = document.getElementById(valueId);
+
+      slider.min = min;
+      slider.max = max;
+      slider.step = sliderStep(min, max);
+      slider.value = value;
+      valueLabel.textContent = three(value);
+      document.getElementById(inputId).value = three(value);
+    }
+
+    function syncSlidersFromInputs() {
+      if (!isFrozen) return;
+
+      const a = parseCoefficient(document.getElementById("aInput").value, "a");
+      const b = parseCoefficient(document.getElementById("bInput").value, "b");
+      const c = parseCoefficient(document.getElementById("cInput").value, "c");
+
+      document.getElementById("aSlider").value = a;
+      document.getElementById("bSlider").value = b;
+      document.getElementById("cSlider").value = c;
+
+      document.getElementById("aSliderValue").textContent = three(a);
+      document.getElementById("bSliderValue").textContent = three(b);
+      document.getElementById("cSliderValue").textContent = three(c);
+    }
+
+    function enterFrozenState() {
+      let coeffs;
+
+      try {
+        coeffs = getCurrentCoefficients({ allowAZero: false });
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+
+      isFrozen = true;
+
+      frozenBounds = {
+        a: coefficientRangeFromInitial(coeffs.a),
+        b: coefficientRangeFromInitial(coeffs.b),
+        c: coefficientRangeFromInitial(coeffs.c)
+      };
+
+      setupOneSlider("aSlider", "aSliderValue", "aInput", frozenBounds.a.min, frozenBounds.a.max, coeffs.a);
+      setupOneSlider("bSlider", "bSliderValue", "bInput", frozenBounds.b.min, frozenBounds.b.max, coeffs.b);
+      setupOneSlider("cSlider", "cSliderValue", "cInput", frozenBounds.c.min, frozenBounds.c.max, coeffs.c);
+
+      document.getElementById("sliderControls").classList.add("active");
+      document.getElementById("freezeBtn").textContent = "Unfreeze";
+
+      const currentView = getCurrentView();
+      drawGraph({
+        preserveView: true,
+        xRange: currentView ? currentView.xRange : null,
+        yRange: currentView ? currentView.yRange : null,
+        allowAZero: true
+      });
+    }
+
+    function leaveFrozenState() {
+      isFrozen = false;
+      frozenBounds = null;
+
+      document.getElementById("sliderControls").classList.remove("active");
+      document.getElementById("freezeBtn").textContent = "Freeze";
+
+      try {
+        getCurrentCoefficients({ allowAZero: false });
+        clearError();
+      } catch (err) {
+        showError(err.message);
+      }
+
+      // Intentionally no redraw here: keep the graph, features, and current view exactly as they are.
+    }
+
+    function toggleFreeze() {
+      if (isFrozen) {
+        leaveFrozenState();
+      } else {
+        enterFrozenState();
+      }
+    }
+
+    function sliderChanged() {
+      if (!isFrozen) return;
+
+      const currentView = getCurrentView();
+
+      const a = Number(document.getElementById("aSlider").value);
+      const b = Number(document.getElementById("bSlider").value);
+      const c = Number(document.getElementById("cSlider").value);
+
+      document.getElementById("aInput").value = three(a);
+      document.getElementById("bInput").value = three(b);
+      document.getElementById("cInput").value = three(c);
+
+      document.getElementById("aSliderValue").textContent = three(a);
+      document.getElementById("bSliderValue").textContent = three(b);
+      document.getElementById("cSliderValue").textContent = three(c);
+
+      drawGraph({
+        preserveView: true,
+        xRange: currentView ? currentView.xRange : null,
+        yRange: currentView ? currentView.yRange : null,
+        allowAZero: true
+      });
+    }
+
+    document.getElementById("drawBtn").addEventListener("click", function () {
+      if (isFrozen) {
+        const currentView = getCurrentView();
+        syncSlidersFromInputs();
+        drawGraph({
+          preserveView: true,
+          xRange: currentView ? currentView.xRange : null,
+          yRange: currentView ? currentView.yRange : null,
+          allowAZero: true
+        });
+      } else {
+        drawGraph({ preserveView: false, allowAZero: false });
+      }
+    });
+
+    document.getElementById("freezeBtn").addEventListener("click", toggleFreeze);
+
+    ["aSlider", "bSlider", "cSlider"].forEach(id => {
+      document.getElementById(id).addEventListener("input", sliderChanged);
+    });
+
+    [
+      "axesToggle",
+      "symmetryToggle",
+      "vertexToggle",
+      "rootsToggle",
+      "yInterceptToggle",
+      "focusToggle",
+      "directrixToggle"
+    ].forEach(id => {
+      document.getElementById(id).addEventListener("change", updateFeaturesOnly);
+    });
+
+    drawGraph({ preserveView: false, allowAZero: false });
+  </script>
+</body>
+</html>
