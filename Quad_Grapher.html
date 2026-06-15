@@ -119,6 +119,22 @@
       text-align: right;
     }
 
+    .formula-readouts {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #ddd;
+      font-size: 16px;
+    }
+
+    .formula-line {
+      margin: 6px 0;
+    }
+
+    .formula-number {
+      font-family: Consolas, "Courier New", monospace;
+      font-weight: bold;
+    }
+
     #freezeBtn {
       margin-top: 2px;
     }
@@ -217,6 +233,15 @@
           <label for="cSlider">\(c\)</label>
           <input id="cSlider" type="range" />
           <span id="cSliderValue" class="slider-value">1.000</span>
+        </div>
+
+        <div class="formula-readouts">
+          <div class="formula-line">
+            \(b^2-4ac=\) <span id="discriminantValue" class="formula-number">-20.000</span>
+          </div>
+          <div class="formula-line">
+            \(-rac{b}{2a}=\) <span id="axisValue" class="formula-number">2.000</span>
+          </div>
         </div>
       </div>
 
@@ -342,6 +367,17 @@
       if (!Number.isFinite(num)) return "undefined";
       if (Math.abs(num) < 0.0005) return "0.000";
       return num.toFixed(3);
+    }
+
+    function updateSliderFormulaReadouts(a, b, c) {
+      const discriminant = b * b - 4 * a * c;
+      document.getElementById("discriminantValue").textContent = three(discriminant);
+
+      if (Math.abs(a) < EPS) {
+        document.getElementById("axisValue").textContent = "undefined";
+      } else {
+        document.getElementById("axisValue").textContent = three(-b / (2 * a));
+      }
     }
 
     function formatNumber(num) {
@@ -701,6 +737,7 @@
 
       const data = makeMathData(a, b, c);
       updateFeaturePanel(a, b, c, data);
+      updateSliderFormulaReadouts(a, b, c);
 
       if (allowAZero && Math.abs(a) < EPS) {
         showError("a is currently 0, so this is not a quadratic. The graph is kept as y = bx + c for now.");
