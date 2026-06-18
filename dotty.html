@@ -7,7 +7,7 @@
   <style>
     :root {
       --boundary: #d32f2f;
-      --interior: #2e7d32;
+      --interior: #1565c0;
       --line: #1565c0;
       --preview: #777;
       --bg: #f7f7f7;
@@ -28,13 +28,6 @@
     h1 {
       margin: 0 0 6px;
       font-size: 24px;
-    }
-
-    .hint {
-      margin: 0;
-      font-size: 14px;
-      color: #555;
-      line-height: 1.35;
     }
 
     .layout {
@@ -75,6 +68,21 @@
       font-size: 18px;
     }
 
+    .modeBox {
+      margin: 6px 0 12px;
+      padding: 10px;
+      background: white;
+      border: 1px solid #e1e1e1;
+      border-radius: 6px;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .modeBox label {
+      display: block;
+      cursor: pointer;
+    }
+
     .result {
       font-size: 18px;
       margin: 10px 0;
@@ -101,19 +109,12 @@
     button:hover:not(:disabled) { background: #f0f0f0; }
 
     button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      background: #eeeeee;
-    }
-
-    button:disabled {
       color: #888;
       background: #e6e6e6;
       border-color: #ccc;
       cursor: not-allowed;
+      opacity: 0.55;
     }
-
-    button:disabled:hover { background: #e6e6e6; }
 
     .message {
       margin-top: 12px;
@@ -123,12 +124,7 @@
       border: 1px solid #ffe082;
       font-size: 14px;
       line-height: 1.35;
-    }
-
-    .small {
-      font-size: 13px;
-      color: #555;
-      line-height: 1.4;
+      min-height: 2.7em;
     }
   </style>
 </head>
@@ -143,13 +139,18 @@
     </div>
 
     <aside class="panel">
+      <h2>Mode</h2>
+      <div class="modeBox">
+        <label><input type="radio" name="mode" value="add" checked> Add new polygon</label>
+        <label><input type="radio" name="mode" value="delete"> Delete polygon</label>
+      </div>
+
       <h2>Count</h2>
       <div class="result"><span class="boundary">p:</span> <span id="pValue">—</span></div>
       <div class="result"><span class="interior">i:</span> <span id="iValue">—</span></div>
       <button id="clearBtn" disabled>Clear</button>
 
-      <!--<div class="message" id="message"></div>-->
-
+      <div class="message" id="message"></div>
     </aside>
   </main>
 
@@ -161,6 +162,7 @@
     const iValue = document.getElementById('iValue');
     const message = document.getElementById('message');
     const clearBtn = document.getElementById('clearBtn');
+    const modeInputs = document.querySelectorAll('input[name="mode"]');
 
     const gridSize = 32;        // pixels per lattice step
     const dotRadius = 3;
@@ -169,12 +171,16 @@
     let width = 0;
     let height = 0;
     let origin = { x: 0, y: 0 };
-    let vertices = [];
+    let currentVertices = [];
     let hoverPoint = null;
-    let isClosed = false;
-    let isValidPolygon = false;
-    let boundaryPoints = [];
-    let interiorPoints = [];
+    let polygons = [];
+    let selectedPolygonId = null;
+    let hoveredPolygonId = null;
+    let nextPolygonId = 1;
+
+    function currentMode() {
+      return document.querySelector('input[name="mode"]:checked').value;
+    }
 
     function resizeCanvas() {
       const rect = canvas.parentElement.getBoundingClientRect();
@@ -223,61 +229,161 @@
       return a;
     }
 
+    function makePointSet(points) {
+      return new Set(points.map(pointKey));
+    }
+
+    function allUsedPointSet() {
+      const used = new Set();
+      for (const poly of polygons) {
+        for (const p of poly.boundaryPoints) used.add(pointKey(p));
+        for (const p of poly.interiorPoints) used.add(pointKey(p));
+      }
+      return used;
+    }
+
+    function polygonAtLatticePoint(pt) {
+      if (!pt) return null;
+      const key = pointKey(pt);
+      for (let i = polygons.length - 1; i >= 0; i--) {
+        const poly = polygons[i];
+        if (poly.allPointSet.has(key)) return poly;
+      }
+      return null;
+    }
+
     function updateHover(evt) {
       const m = mousePos(evt);
       const candidate = screenToLattice(m.x, m.y);
       const s = latticeToScreen(candidate);
       const dist = Math.hypot(m.x - s.x, m.y - s.y);
       hoverPoint = dist <= snapDistance ? candidate : null;
+      const hovered = polygonAtLatticePoint(hoverPoint);
+      hoveredPolygonId = hovered ? hovered.id : null;
       draw();
     }
 
     function handleClick(evt) {
-      if (isClosed) return;
       updateHover(evt);
+
+      if (currentMode() === 'delete') {
+        deleteClickedPolygon();
+        return;
+      }
+
+      handleAddModeClick();
+    }
+
+    function handleAddModeClick() {
       if (!hoverPoint) {
         setMessage('Move closer to a dot before clicking.');
         return;
       }
 
-      const clicked = hoverPoint;
-
-      if (vertices.length >= 3 && samePoint(clicked, vertices[0])) {
-        closePolygon();
+      const clickedExistingPolygon = polygonAtLatticePoint(hoverPoint);
+      if (clickedExistingPolygon && currentVertices.length === 0) {
+        selectPolygon(clickedExistingPolygon.id);
+        setMessage('Polygon selected. Its count is shown on the right.');
         return;
       }
 
-      if (vertices.some(v => samePoint(v, clicked))) {
+      const used = allUsedPointSet();
+      const clickedKey = pointKey(hoverPoint);
+
+      if (used.has(clickedKey)) {
+        setMessage('That dot is already used by another polygon. Choose a different dot.');
+        return;
+      }
+
+      if (currentVertices.length >= 3 && samePoint(hoverPoint, currentVertices[0])) {
+        closeCurrentPolygon();
+        return;
+      }
+
+      if (currentVertices.some(v => samePoint(v, hoverPoint))) {
         setMessage('That point is already a vertex. Choose a new point, or click the starting point to close the polygon.');
         return;
       }
 
-      vertices.push({ ...clicked });
-      setMessage(vertices.length < 3
+      selectedPolygonId = null;
+      currentVertices.push({ ...hoverPoint });
+      updateResults();
+      updateClearButton();
+      setMessage(currentVertices.length < 3
         ? 'Good. Add more vertices. You need at least 3 before you can close the polygon.'
         : 'Now you may add another vertex, or click the starting point to close the polygon.'
       );
       draw();
     }
 
-    function closePolygon() {
-      isClosed = true;
-      updateClearButton();
-      isValidPolygon = polygonIsSimple(vertices);
-
-      if (!isValidPolygon) {
-        setMessage('This polygon is not legitimate because some sides cross. Press Clear and try again.');
-        boundaryPoints = [];
-        interiorPoints = [];
-        updateResults();
-        draw();
+    function closeCurrentPolygon() {
+      if (!polygonIsSimple(currentVertices)) {
+        eraseAttempt('That polygon is not legitimate because some sides cross. It has been erased.');
         return;
       }
 
-      boundaryPoints = getBoundaryPoints(vertices);
-      interiorPoints = getInteriorPoints(vertices, boundaryPoints);
+      const boundaryPoints = getBoundaryPoints(currentVertices);
+      const interiorPoints = getInteriorPoints(currentVertices, boundaryPoints);
+      const newPointSet = makePointSet([...boundaryPoints, ...interiorPoints]);
+      const used = allUsedPointSet();
+
+      for (const key of newPointSet) {
+        if (used.has(key)) {
+          eraseAttempt('That polygon overlaps with a point already used by another polygon. It has been erased.');
+          return;
+        }
+      }
+
+      const poly = {
+        id: nextPolygonId++,
+        vertices: currentVertices.map(p => ({ ...p })),
+        boundaryPoints,
+        interiorPoints,
+        allPointSet: newPointSet
+      };
+
+      polygons.push(poly);
+      selectedPolygonId = null;
+      currentVertices = [];
       updateResults();
-      setMessage('Polygon completed. Boundary points and interior points are highlighted.');
+      updateClearButton();
+      setMessage('Polygon added. Click one of its red or blue dots to show its count.');
+      draw();
+    }
+
+    function eraseAttempt(text) {
+      currentVertices = [];
+      hoverPoint = null;
+      selectedPolygonId = null;
+      updateResults();
+      updateClearButton();
+      setMessage(text);
+      draw();
+    }
+
+    function deleteClickedPolygon() {
+      if (!hoverPoint) {
+        setMessage('Move close to a red or blue dot of the polygon you want to delete.');
+        return;
+      }
+      const poly = polygonAtLatticePoint(hoverPoint);
+      if (!poly) {
+        setMessage('No polygon selected for deletion. Click one of its red or blue dots.');
+        return;
+      }
+      polygons = polygons.filter(p => p.id !== poly.id);
+      if (selectedPolygonId === poly.id) selectedPolygonId = null;
+      if (hoveredPolygonId === poly.id) hoveredPolygonId = null;
+      currentVertices = [];
+      updateResults();
+      updateClearButton();
+      setMessage('Polygon deleted.');
+      draw();
+    }
+
+    function selectPolygon(id) {
+      selectedPolygonId = id;
+      updateResults();
       draw();
     }
 
@@ -387,16 +493,18 @@
       return false;
     }
 
-    function updateClearButton() {
-      // Clear should be available after any attempted closure,
-      // including an illegitimate/self-intersecting polygon.
-      clearBtn.disabled = !isClosed;
+    function selectedPolygon() {
+      return polygons.find(p => p.id === selectedPolygonId) || null;
     }
 
     function updateResults() {
-      pValue.textContent = isClosed && isValidPolygon ? boundaryPoints.length : '—';
-      iValue.textContent = isClosed && isValidPolygon ? interiorPoints.length : '—';
-      updateClearButton();
+      const poly = selectedPolygon();
+      pValue.textContent = poly ? poly.boundaryPoints.length : '—';
+      iValue.textContent = poly ? poly.interiorPoints.length : '—';
+    }
+
+    function updateClearButton() {
+      clearBtn.disabled = polygons.length === 0 && currentVertices.length === 0;
     }
 
     function setMessage(text) {
@@ -404,14 +512,14 @@
     }
 
     function clearAll() {
-      vertices = [];
+      polygons = [];
+      currentVertices = [];
       hoverPoint = null;
-      isClosed = false;
-      isValidPolygon = false;
-      boundaryPoints = [];
-      interiorPoints = [];
+      hoveredPolygonId = null;
+      selectedPolygonId = null;
       updateResults();
-      setMessage('Start by clicking any dot.');
+      updateClearButton();
+      setMessage('Start by clicking any unused dot.');
       draw();
     }
 
@@ -450,23 +558,30 @@
       ctx.restore();
     }
 
-    function drawPolygonLines() {
-      const normalLineColor = getComputedStyle(document.documentElement).getPropertyValue('--line');
-      const invalidLineColor = '#c62828';
-      const lineColor = isClosed && !isValidPolygon ? invalidLineColor : normalLineColor;
+    function drawPolygon(poly, active) {
+      const lineColor = active ? 'rgba(21, 101, 192, 1)' : 'rgba(21, 101, 192, 0.28)';
+      const boundaryColor = active ? 'rgba(211, 47, 47, 1)' : 'rgba(211, 47, 47, 0.35)';
+      const interiorColor = active ? 'rgba(21, 101, 192, 1)' : 'rgba(21, 101, 192, 0.25)';
+      const lineWidth = active ? 4 : 3;
+      const radius = active ? 6 : 5;
 
-      if (vertices.length >= 2) {
-        for (let i = 0; i < vertices.length - 1; i++) {
-          drawLine(vertices[i], vertices[i + 1], lineColor, 4);
+      for (let i = 0; i < poly.vertices.length; i++) {
+        drawLine(poly.vertices[i], poly.vertices[(i + 1) % poly.vertices.length], lineColor, lineWidth);
+      }
+
+      drawHighlightedPoints(poly.interiorPoints, interiorColor, radius);
+      drawHighlightedPoints(poly.boundaryPoints, boundaryColor, radius);
+    }
+
+    function drawCurrentLines() {
+      if (currentVertices.length >= 2) {
+        for (let i = 0; i < currentVertices.length - 1; i++) {
+          drawLine(currentVertices[i], currentVertices[i + 1], '#1565c0', 4);
         }
       }
 
-      if (isClosed && vertices.length >= 3) {
-        drawLine(vertices[vertices.length - 1], vertices[0], lineColor, 4);
-      }
-
-      if (!isClosed && hoverPoint && vertices.length >= 1) {
-        drawLine(vertices[vertices.length - 1], hoverPoint, getComputedStyle(document.documentElement).getPropertyValue('--preview'), 2, true);
+      if (hoverPoint && currentVertices.length >= 1 && currentMode() === 'add') {
+        drawLine(currentVertices[currentVertices.length - 1], hoverPoint, '#777', 2, true);
       }
     }
 
@@ -480,10 +595,9 @@
       }
     }
 
-    function drawVertices() {
-      if (isClosed) return;
-      for (let i = 0; i < vertices.length; i++) {
-        const s = latticeToScreen(vertices[i]);
+    function drawCurrentVertices() {
+      for (let i = 0; i < currentVertices.length; i++) {
+        const s = latticeToScreen(currentVertices[i]);
         ctx.fillStyle = i === 0 ? '#ff9800' : '#111';
         ctx.beginPath();
         ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
@@ -492,17 +606,23 @@
     }
 
     function drawHover() {
-      if (!hoverPoint || isClosed) return;
+      if (!hoverPoint) return;
       const s = latticeToScreen(hoverPoint);
       let color = '#333';
       let radius = 6;
 
-      if (vertices.length >= 3 && samePoint(hoverPoint, vertices[0])) {
-        color = '#ff9800';
-        radius = 11;
-      } else if (vertices.some(v => samePoint(v, hoverPoint))) {
-        color = '#c62828';
-        radius = 8;
+      if (currentMode() === 'add') {
+        const used = allUsedPointSet();
+        if (currentVertices.length >= 3 && samePoint(hoverPoint, currentVertices[0])) {
+          color = '#ff9800';
+          radius = 11;
+        } else if (currentVertices.some(v => samePoint(v, hoverPoint)) || used.has(pointKey(hoverPoint))) {
+          color = '#c62828';
+          radius = 8;
+        }
+      } else {
+        color = hoveredPolygonId ? '#c62828' : '#333';
+        radius = hoveredPolygonId ? 10 : 6;
       }
 
       ctx.strokeStyle = color;
@@ -514,27 +634,47 @@
 
     function draw() {
       drawGrid();
-      drawPolygonLines();
 
-      if (isClosed && isValidPolygon) {
-        drawHighlightedPoints(interiorPoints, '#2e7d32', 6);
-        drawHighlightedPoints(boundaryPoints, '#d32f2f', 6);
-        return;
+      for (const poly of polygons) {
+        const active = poly.id === selectedPolygonId || poly.id === hoveredPolygonId;
+        drawPolygon(poly, active);
       }
 
-      drawVertices();
+      if (currentMode() === 'add') {
+        drawCurrentLines();
+        drawCurrentVertices();
+      }
+
       drawHover();
     }
 
     canvas.addEventListener('mousemove', updateHover);
-    canvas.addEventListener('mouseleave', () => { hoverPoint = null; draw(); });
+    canvas.addEventListener('mouseleave', () => {
+      hoverPoint = null;
+      hoveredPolygonId = null;
+      draw();
+    });
     canvas.addEventListener('click', handleClick);
     clearBtn.addEventListener('click', clearAll);
+    for (const input of modeInputs) {
+      input.addEventListener('change', () => {
+        currentVertices = [];
+        selectedPolygonId = null;
+        updateResults();
+        updateClearButton();
+        setMessage(currentMode() === 'add'
+          ? 'Add mode: click unused dots to draw a new polygon.'
+          : 'Delete mode: click one red or blue dot of a polygon to delete it.'
+        );
+        draw();
+      });
+    }
     window.addEventListener('resize', resizeCanvas);
 
     resizeCanvas();
     updateResults();
-    setMessage('Start by clicking any dot.');
+    updateClearButton();
+    setMessage('Start by clicking any unused dot.');
   </script>
 </body>
 </html>
