@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dotty Paper</title>
+  <style>
+    :root {
+      --boundary: #d32f2f;
+      --interior: #2e7d32;
+      --line: #1565c0;
+      --preview: #777;
+      --bg: #f7f7f7;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #ffffff;
+      color: #222;
+    }
+
+    header {
+      padding: 14px 18px 8px;
+      border-bottom: 1px solid #ddd;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+
+    .hint {
+      margin: 0;
+      font-size: 14px;
+      color: #555;
+      line-height: 1.35;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(500px, 1fr) 290px;
+      gap: 12px;
+      padding: 12px;
+      box-sizing: border-box;
+      height: calc(100vh - 78px);
+    }
+
+    .canvas-wrap {
+      position: relative;
+      border: 1px solid #bbb;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg);
+      min-height: 450px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    .panel {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 14px;
+      background: #fafafa;
+      overflow: auto;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .result {
+      font-size: 18px;
+      margin: 10px 0;
+      padding: 10px;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #e1e1e1;
+    }
+
+    .boundary { color: var(--boundary); font-weight: bold; }
+    .interior { color: var(--interior); font-weight: bold; }
+
+    button {
+      width: 100%;
+      font-size: 15px;
+      padding: 10px;
+      margin: 6px 0;
+      border: 1px solid #aaa;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) { background: #f0f0f0; }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: #eeeeee;
+    }
+
+    button:disabled {
+      color: #888;
+      background: #e6e6e6;
+      border-color: #ccc;
+      cursor: not-allowed;
+    }
+
+    button:disabled:hover { background: #e6e6e6; }
+
+    .message {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 6px;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dotty Paper</h1>
+  </header>
+
+  <main class="layout">
+    <div class="canvas-wrap">
+      <canvas id="board"></canvas>
+    </div>
+
+    <aside class="panel">
+      <h2>Count</h2>
+      <div class="result"><span class="boundary">p:</span> <span id="pValue">—</span></div>
+      <div class="result"><span class="interior">i:</span> <span id="iValue">—</span></div>
+      <button id="clearBtn" disabled>Clear</button>
+
+      <!--<div class="message" id="message"></div>-->
+
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+
+    const pValue = document.getElementById('pValue');
+    const iValue = document.getElementById('iValue');
+    const message = document.getElementById('message');
+    const clearBtn = document.getElementById('clearBtn');
+
+    const gridSize = 32;        // pixels per lattice step
+    const dotRadius = 3;
+    const snapDistance = 14;    // pixels
+
+    let width = 0;
+    let height = 0;
+    let origin = { x: 0, y: 0 };
+    let vertices = [];
+    let hoverPoint = null;
+    let isClosed = false;
+    let isValidPolygon = false;
+    let boundaryPoints = [];
+    let interiorPoints = [];
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      width = Math.floor(rect.width);
+      height = Math.floor(rect.height);
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      origin = { x: Math.floor(width / 2), y: Math.floor(height / 2) };
+      draw();
+    }
+
+    function latticeToScreen(pt) {
+      return {
+        x: origin.x + pt.x * gridSize,
+        y: origin.y - pt.y * gridSize
+      };
+    }
+
+    function screenToLattice(x, y) {
+      return {
+        x: Math.round((x - origin.x) / gridSize),
+        y: Math.round((origin.y - y) / gridSize)
+      };
+    }
+
+    function mousePos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    }
+
+    function samePoint(a, b) {
+      return a && b && a.x === b.x && a.y === b.y;
+    }
+
+    function pointKey(p) {
+      return `${p.x},${p.y}`;
+    }
+
+    function gcd(a, b) {
+      a = Math.abs(a); b = Math.abs(b);
+      while (b !== 0) [a, b] = [b, a % b];
+      return a;
+    }
+
+    function updateHover(evt) {
+      const m = mousePos(evt);
+      const candidate = screenToLattice(m.x, m.y);
+      const s = latticeToScreen(candidate);
+      const dist = Math.hypot(m.x - s.x, m.y - s.y);
+      hoverPoint = dist <= snapDistance ? candidate : null;
+      draw();
+    }
+
+    function handleClick(evt) {
+      if (isClosed) return;
+      updateHover(evt);
+      if (!hoverPoint) {
+        setMessage('Move closer to a dot before clicking.');
+        return;
+      }
+
+      const clicked = hoverPoint;
+
+      if (vertices.length >= 3 && samePoint(clicked, vertices[0])) {
+        closePolygon();
+        return;
+      }
+
+      if (vertices.some(v => samePoint(v, clicked))) {
+        setMessage('That point is already a vertex. Choose a new point, or click the starting point to close the polygon.');
+        return;
+      }
+
+      vertices.push({ ...clicked });
+      setMessage(vertices.length < 3
+        ? 'Good. Add more vertices. You need at least 3 before you can close the polygon.'
+        : 'Now you may add another vertex, or click the starting point to close the polygon.'
+      );
+      draw();
+    }
+
+    function closePolygon() {
+      isClosed = true;
+      updateClearButton();
+      isValidPolygon = polygonIsSimple(vertices);
+
+      if (!isValidPolygon) {
+        setMessage('This polygon is not legitimate because some sides cross. Press Clear and try again.');
+        boundaryPoints = [];
+        interiorPoints = [];
+        updateResults();
+        draw();
+        return;
+      }
+
+      boundaryPoints = getBoundaryPoints(vertices);
+      interiorPoints = getInteriorPoints(vertices, boundaryPoints);
+      updateResults();
+      setMessage('Polygon completed. Boundary points and interior points are highlighted.');
+      draw();
+    }
+
+    function polygonArea(poly) {
+      let sum = 0;
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i];
+        const b = poly[(i + 1) % poly.length];
+        sum += a.x * b.y - a.y * b.x;
+      }
+      return Math.abs(sum) / 2;
+    }
+
+    function getBoundaryPoints(poly) {
+      const map = new Map();
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i];
+        const b = poly[(i + 1) % poly.length];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const steps = gcd(dx, dy);
+        const stepX = dx / steps;
+        const stepY = dy / steps;
+        for (let k = 0; k <= steps; k++) {
+          const p = { x: a.x + k * stepX, y: a.y + k * stepY };
+          map.set(pointKey(p), p);
+        }
+      }
+      return [...map.values()];
+    }
+
+    function getInteriorPoints(poly, boundary) {
+      const boundarySet = new Set(boundary.map(pointKey));
+      const xs = poly.map(p => p.x);
+      const ys = poly.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const inside = [];
+
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          const p = { x, y };
+          if (boundarySet.has(pointKey(p))) continue;
+          if (pointInPolygon(p, poly)) inside.push(p);
+        }
+      }
+      return inside;
+    }
+
+    // Ray-casting test. Boundary points are excluded before this function is called.
+    function pointInPolygon(point, poly) {
+      let inside = false;
+      const x = point.x, y = point.y;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y;
+        const xj = poly[j].x, yj = poly[j].y;
+        const intersect = ((yi > y) !== (yj > y)) &&
+          (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function polygonIsSimple(poly) {
+      const n = poly.length;
+      for (let i = 0; i < n; i++) {
+        const a1 = poly[i];
+        const a2 = poly[(i + 1) % n];
+        for (let j = i + 1; j < n; j++) {
+          const b1 = poly[j];
+          const b2 = poly[(j + 1) % n];
+
+          // Adjacent edges naturally share one endpoint; that is allowed.
+          if (i === j) continue;
+          if ((i + 1) % n === j) continue;
+          if (i === (j + 1) % n) continue;
+
+          if (segmentsIntersect(a1, a2, b1, b2)) return false;
+        }
+      }
+      return polygonArea(poly) > 0;
+    }
+
+    function orientation(a, b, c) {
+      const val = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      if (val === 0) return 0;
+      return val > 0 ? 1 : -1;
+    }
+
+    function onSegment(a, b, c) {
+      return Math.min(a.x, c.x) <= b.x && b.x <= Math.max(a.x, c.x) &&
+             Math.min(a.y, c.y) <= b.y && b.y <= Math.max(a.y, c.y) &&
+             orientation(a, b, c) === 0;
+    }
+
+    function segmentsIntersect(p1, q1, p2, q2) {
+      const o1 = orientation(p1, q1, p2);
+      const o2 = orientation(p1, q1, q2);
+      const o3 = orientation(p2, q2, p1);
+      const o4 = orientation(p2, q2, q1);
+
+      if (o1 !== o2 && o3 !== o4) return true;
+      if (o1 === 0 && onSegment(p1, p2, q1)) return true;
+      if (o2 === 0 && onSegment(p1, q2, q1)) return true;
+      if (o3 === 0 && onSegment(p2, p1, q2)) return true;
+      if (o4 === 0 && onSegment(p2, q1, q2)) return true;
+      return false;
+    }
+
+    function updateClearButton() {
+      // Clear should be available after any attempted closure,
+      // including an illegitimate/self-intersecting polygon.
+      clearBtn.disabled = !isClosed;
+    }
+
+    function updateResults() {
+      pValue.textContent = isClosed && isValidPolygon ? boundaryPoints.length : '—';
+      iValue.textContent = isClosed && isValidPolygon ? interiorPoints.length : '—';
+      updateClearButton();
+    }
+
+    function setMessage(text) {
+      message.textContent = text;
+    }
+
+    function clearAll() {
+      vertices = [];
+      hoverPoint = null;
+      isClosed = false;
+      isValidPolygon = false;
+      boundaryPoints = [];
+      interiorPoints = [];
+      updateResults();
+      setMessage('Start by clicking any dot.');
+      draw();
+    }
+
+    function drawGrid() {
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#f7f7f7';
+      ctx.fillRect(0, 0, width, height);
+
+      const minX = Math.floor((0 - origin.x) / gridSize) - 1;
+      const maxX = Math.ceil((width - origin.x) / gridSize) + 1;
+      const minY = Math.floor((origin.y - height) / gridSize) - 1;
+      const maxY = Math.ceil(origin.y / gridSize) + 1;
+
+      ctx.fillStyle = '#999';
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          const s = latticeToScreen({ x, y });
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, dotRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawLine(a, b, color, widthPx, dashed = false) {
+      const sa = latticeToScreen(a);
+      const sb = latticeToScreen(b);
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = widthPx;
+      ctx.setLineDash(dashed ? [8, 6] : []);
+      ctx.beginPath();
+      ctx.moveTo(sa.x, sa.y);
+      ctx.lineTo(sb.x, sb.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawPolygonLines() {
+      const normalLineColor = getComputedStyle(document.documentElement).getPropertyValue('--line');
+      const invalidLineColor = '#c62828';
+      const lineColor = isClosed && !isValidPolygon ? invalidLineColor : normalLineColor;
+
+      if (vertices.length >= 2) {
+        for (let i = 0; i < vertices.length - 1; i++) {
+          drawLine(vertices[i], vertices[i + 1], lineColor, 4);
+        }
+      }
+
+      if (isClosed && vertices.length >= 3) {
+        drawLine(vertices[vertices.length - 1], vertices[0], lineColor, 4);
+      }
+
+      if (!isClosed && hoverPoint && vertices.length >= 1) {
+        drawLine(vertices[vertices.length - 1], hoverPoint, getComputedStyle(document.documentElement).getPropertyValue('--preview'), 2, true);
+      }
+    }
+
+    function drawHighlightedPoints(points, color, radius) {
+      ctx.fillStyle = color;
+      for (const p of points) {
+        const s = latticeToScreen(p);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawVertices() {
+      if (isClosed) return;
+      for (let i = 0; i < vertices.length; i++) {
+        const s = latticeToScreen(vertices[i]);
+        ctx.fillStyle = i === 0 ? '#ff9800' : '#111';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawHover() {
+      if (!hoverPoint || isClosed) return;
+      const s = latticeToScreen(hoverPoint);
+      let color = '#333';
+      let radius = 6;
+
+      if (vertices.length >= 3 && samePoint(hoverPoint, vertices[0])) {
+        color = '#ff9800';
+        radius = 11;
+      } else if (vertices.some(v => samePoint(v, hoverPoint))) {
+        color = '#c62828';
+        radius = 8;
+      }
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    function draw() {
+      drawGrid();
+      drawPolygonLines();
+
+      if (isClosed && isValidPolygon) {
+        drawHighlightedPoints(interiorPoints, '#2e7d32', 6);
+        drawHighlightedPoints(boundaryPoints, '#d32f2f', 6);
+        return;
+      }
+
+      drawVertices();
+      drawHover();
+    }
+
+    canvas.addEventListener('mousemove', updateHover);
+    canvas.addEventListener('mouseleave', () => { hoverPoint = null; draw(); });
+    canvas.addEventListener('click', handleClick);
+    clearBtn.addEventListener('click', clearAll);
+    window.addEventListener('resize', resizeCanvas);
+
+    resizeCanvas();
+    updateResults();
+    setMessage('Start by clicking any dot.');
+  </script>
+</body>
+</html>
